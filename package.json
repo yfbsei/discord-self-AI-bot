@@ -1,0 +1,16 @@
+{
+  "name": "discord-self-ai-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "discord-ai-bot.js",
+  "type": "module",
+  "scripts": {
+    "start": "node discord-ai-bot.js"
+  },
+  "author": "yfbsei",
+  "license": "ISC",
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "ws": "^8.18.1"
+  }
+}
