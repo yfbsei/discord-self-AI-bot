@@ -1,10 +1,20 @@
-// discord-base.js with polling support
+// discord-base.js with polling support and environment variables
 import fetch from 'node-fetch';
 import { WebSocket } from 'ws';
+import dotenv from 'dotenv';
 
-// Your existing user token
-const USER_TOKEN = 'your discord auth token';
+// Load environment variables
+dotenv.config();
+
+// Your existing user token from environment
+const USER_TOKEN = process.env.USER_TOKEN;
 const API_VERSION = '9';
+
+// Validate required environment variables
+if (!USER_TOKEN) {
+  console.error('ERROR: USER_TOKEN is required in .env file');
+  process.exit(1);
+}
 
 // We'll fetch the user ID dynamically rather than hardcoding it
 let MY_USER_ID = null; // leave it as null
@@ -84,7 +94,7 @@ async function sendMessage(channelId, content) {
 async function pollChannel(channelId, messageHandler, interval = 5000) {
   console.log(`Starting polling for channel ${channelId} at ${interval}ms intervals`);
   let lastMessageId = null;
-  
+
   // Initial fetch to get last message ID
   try {
     const initialMessages = await discordRequest(`channels/${channelId}/messages?limit=1`);
@@ -95,38 +105,38 @@ async function pollChannel(channelId, messageHandler, interval = 5000) {
   } catch (error) {
     console.error(`Error fetching initial messages for channel ${channelId}:`, error);
   }
-  
+
   // Set up polling interval
   const pollInterval = setInterval(async () => {
     try {
       // Get the latest messages from the channel
       const messages = await discordRequest(`channels/${channelId}/messages?limit=5`);
-      
+
       // Process new messages (newest first)
       for (const message of messages) {
         // Skip if we've already processed this message
-        if (processedMessageIds.has(message.id) || 
-            (lastMessageId && message.id <= lastMessageId)) {
+        if (processedMessageIds.has(message.id) ||
+          (lastMessageId && message.id <= lastMessageId)) {
           continue;
         }
-        
+
         // Skip if it's from your own account
         if (message.author.id === MY_USER_ID) continue;
-        
+
         // Skip if it's from a bot
         if (message.author.bot) continue;
-        
+
         console.log(`[POLL] New message in ${channelId} from ${message.author.username}: ${message.content}`);
-        
+
         // Check if this message mentions the bot
         let isBotMentioned = false;
         if (message.mentions && Array.isArray(message.mentions)) {
           isBotMentioned = message.mentions.some(mention => mention.id === MY_USER_ID);
         }
-        
+
         // Check if this is a reply
         const isReply = message.message_reference ? true : false;
-        
+
         // If it's a reply, check if it's replying to the bot
         let isReplyToBot = false;
         if (isReply && message.message_reference) {
@@ -139,10 +149,10 @@ async function pollChannel(channelId, messageHandler, interval = 5000) {
             console.error('Error fetching replied-to message:', error);
           }
         }
-        
+
         // Add to processed messages
         processedMessageIds.add(message.id);
-        
+
         // Process the message using the message handler
         if (messageHandler) {
           await messageHandler(
@@ -153,17 +163,18 @@ async function pollChannel(channelId, messageHandler, interval = 5000) {
             {
               isReply,
               isReplyToBot,
-              isBotMentioned
+              isBotMentioned,
+              hasAttachments: message.attachments && message.attachments.length > 0
             }
           );
         }
       }
-      
+
       // Update the last seen message ID if we found new messages
       if (messages.length > 0) {
         lastMessageId = messages[0].id;
       }
-      
+
       // Clean up old message IDs from the processed set (keep last 100)
       if (processedMessageIds.size > 100) {
         const toRemove = processedMessageIds.size - 100;
@@ -176,7 +187,7 @@ async function pollChannel(channelId, messageHandler, interval = 5000) {
       console.error(`Error polling channel ${channelId}:`, error);
     }
   }, interval);
-  
+
   // Return the interval handle so it can be cleared if needed
   return pollInterval;
 }
@@ -188,11 +199,11 @@ async function listenForMessages(messageHandler = null) {
   if (!MY_USER_ID) {
     await getCurrentUser();
   }
-  
+
   // Get the gateway URL
   const gateway = await discordRequest('gateway');
   const ws = new WebSocket(`${gateway.url}?v=${API_VERSION}&encoding=json`);
-  
+
   let interval;
   let sequence = null;
 
@@ -219,7 +230,7 @@ async function listenForMessages(messageHandler = null) {
     }
 
     const { op, d, s, t } = payload;
-    
+
     if (s) sequence = s;
 
     switch (op) {
@@ -227,7 +238,7 @@ async function listenForMessages(messageHandler = null) {
         interval = setInterval(() => {
           ws.send(JSON.stringify({ op: 1, d: sequence }));
         }, d.heartbeat_interval);
-        
+
         // Identify with the gateway
         ws.send(JSON.stringify({
           op: 2,
@@ -242,46 +253,46 @@ async function listenForMessages(messageHandler = null) {
           }
         }));
         break;
-        
+
       case 0: // Event Dispatch
         if (t === 'MESSAGE_CREATE') {
           // Log message info for debugging
           console.log(`Message from user ID: ${d.author.id}, MY_USER_ID: ${MY_USER_ID}, Bot: ${d.author.bot ? 'Yes' : 'No'}`);
-          
+
           // Add message ID to processed messages to avoid duplicate processing from polling
           processedMessageIds.add(d.id);
-          
+
           // Ignore your own messages to prevent loops
           if (d.author.id === MY_USER_ID) {
             console.log('Ignoring own message');
             return;
           }
-          
+
           // Ignore messages from bots
           if (d.author.bot) {
             console.log('Ignoring bot message');
             return;
           }
-          
+
           // Check if this message mentions the bot (either by @mention or by user ID)
           let isBotMentioned = false;
-          
+
           // Check for mentions in the mentions array
           if (d.mentions && Array.isArray(d.mentions)) {
             isBotMentioned = d.mentions.some(mention => mention.id === MY_USER_ID);
           }
-          
+
           // Also check if the bot's ID or username appears in the content
           // This handles cases where the message doesn't have a proper mention object
           if (!isBotMentioned) {
             const botUsername = await getCurrentUser().then(user => user.username.toLowerCase());
-            isBotMentioned = d.content.toLowerCase().includes(`@${botUsername}`) || 
-                             d.content.includes(MY_USER_ID);
+            isBotMentioned = d.content.toLowerCase().includes(`@${botUsername}`) ||
+              d.content.includes(MY_USER_ID);
           }
-          
+
           // Check if this message is a reply
           const isReply = d.message_reference ? true : false;
-          
+
           // If it's a reply, check if it's replying to the bot
           let isReplyToBot = false;
           if (isReply && d.message_reference) {
@@ -294,26 +305,27 @@ async function listenForMessages(messageHandler = null) {
               console.error('Error fetching replied-to message:', error);
             }
           }
-          
+
           // Log if bot is mentioned
           if (isBotMentioned) {
             console.log(`Bot was mentioned in this message`);
           }
-          
+
           console.log(`[GATEWAY] New message from ${d.author.username}: ${d.content}`);
-          
+
           // Use the custom message handler if provided
           if (messageHandler) {
             // Pass relevant data to handler
             await messageHandler(
-              d.content, 
-              d.author.username, 
-              d.channel_id, 
-              d.id, 
+              d.content,
+              d.author.username,
+              d.channel_id,
+              d.id,
               {
                 isReply,
                 isReplyToBot,
-                isBotMentioned
+                isBotMentioned,
+                hasAttachments: d.attachments && d.attachments.length > 0
               }
             );
           }
@@ -325,7 +337,7 @@ async function listenForMessages(messageHandler = null) {
   ws.on('close', (code) => {
     console.log(`Connection closed with code ${code}`);
     clearInterval(interval);
-    
+
     // Attempt to reconnect
     setTimeout(() => {
       console.log('Attempting to reconnect...');
@@ -336,7 +348,7 @@ async function listenForMessages(messageHandler = null) {
   ws.on('error', (error) => {
     console.error('WebSocket error:', error);
   });
-  
+
   // Return the WebSocket instance in case it's needed elsewhere
   return ws;
 }

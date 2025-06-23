@@ -1,0 +1,12 @@
+# Discord Bot Configuration - REQUIRED
+USER_TOKEN="user token of account to be botify"
+
+# Hugging Face API Configuration - REQUIRED
+HUGGINGFACE_API_KEY=""
+
+# Admin Configuration - REQUIRED
+ADMIN_USERNAME="my discord username"
+
+# Channel Configuration - REQUIRED (JSON format)
+# Add your channel IDs and configuration here
+MONITORED_CHANNELS=[{"id":"CHANNEL_ID_1","usePolling":false,"pollInterval":5000},{"id":"CHANNEL_ID_2","usePolling":false,"pollInterval":5000},{"id":"CHANNEL_ID_3","usePolling":true,"pollInterval":3000}]
