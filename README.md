@@ -2,6 +2,25 @@
 
 A Discord bot that uses the Hugging Face API to provide AI-powered responses with Meta's Llama 3.1 8B Instruct model in a casual, human-like conversational style.
 
+# Discord Self AI Bot
+
+[![License](https://img.shields.io/github/license/yfbsei/discord-self-AI-bot)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-12%2B-brightgreen)](https://nodejs.org/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blue.svg)](https://github.com/yfbsei/discord-self-AI-bot/pulls)
+[![Issues](https://img.shields.io/github/issues/yfbsei/discord-self-AI-bot)](https://github.com/yfbsei/discord-self-AI-bot/issues)
+[![Stars](https://img.shields.io/github/stars/yfbsei/discord-self-AI-bot?style=social)](https://github.com/yfbsei/discord-self-AI-bot/stargazers)
+
+---
+
+> **An AI-powered Discord self-bot** powered by Meta's LLaMA 3.1 Instruct 8B model via Hugging Face API. Responds like a human, supports multi-channel chat automation, and gives you flexible message control — all from your own account.
+
+---
+
+### 🔍 Keywords / SEO Tags (for discoverability):
+> `discord-selfbot`, `discord ai bot`, `llama 3 bot`, `huggingface`, `llama3 chatbot`, `nodejs bot`, `websocket`, `polling`, `selfbot ai`, `discord automation`, `llama3.1`, `discord chatbot`, `ai assistant`
+
+---
+
 ## ⚠️ DISCLAIMER
 
 **FOR EDUCATIONAL PURPOSES ONLY!**
