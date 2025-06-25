@@ -1,9 +1,5 @@
 # Discord Self AI Bot
 
-A Discord bot that uses the Hugging Face API to provide AI-powered responses with Meta's Llama 3.1 8B Instruct model in a casual, human-like conversational style.
-
-# Discord Self AI Bot
-
 [![License](https://img.shields.io/github/license/yfbsei/discord-self-AI-bot)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-12%2B-brightgreen)](https://nodejs.org/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-blue.svg)](https://github.com/yfbsei/discord-self-AI-bot/pulls)
