@@ -1,4 +1,4 @@
-// discord-ai-bot.js - Updated with Together AI
+// discord-ai-bot.js - Refactored with enhanced debugging and proper token limits
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import { replyToMessage, startMonitoring } from './discord-base.js';
@@ -31,11 +31,16 @@ const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
 const TOGETHER_API_URL = 'https://api.together.xyz/v1/chat/completions';
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PRIMARY_MODEL = 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free';
-const FALLBACK_MODEL = 'mistralai/mistral-small-3.2-24b-instruct:free';
+const FALLBACK_MODEL = 'deepseek/deepseek-r1-0528-qwen3-8b:free';
+
+// Discord limits - increased to allow longer single messages
+const DISCORD_MAX_MESSAGE_LENGTH = 2000;
+const DISCORD_SAFE_LENGTH = 1990; // Much higher threshold
 
 // Bot settings
-let RESPOND_TO_ALL_MESSAGES = true; // ON mode by default
+let RESPOND_TO_ALL_MESSAGES = true;
 const recentMessages = new Map();
+const conversationHistory = new Map();
 
 // Mode toggle function
 function toggleMode(newMode, username) {
@@ -54,48 +59,118 @@ function toggleMode(newMode, username) {
   }
 }
 
-// Clean AI response text
-function cleanResponse(text) {
-  if (!text) return "";
+// Split long messages for Discord
+function splitMessage(text, maxLength = DISCORD_SAFE_LENGTH) {
+  if (text.length <= maxLength) {
+    return [text];
+  }
 
-  try {
-    let cleaned = text
-      .replace(/^\s*(assistant|user|system):\s*/i, '') // Remove prefixes
-      .replace(/^(as an ai|i'm an ai|as a language model)/i, '') // Remove AI speak
-      .replace(/```[a-z]*\n|```/g, '') // Remove code blocks
-      .replace(/^\d+\.\s*/gm, '') // Remove numbered lists
-      .replace(/^[\-\*]\s*/gm, '') // Remove bullet points
-      .trim()
-      .replace(/\s+/g, ' ');
+  const parts = [];
+  let currentPart = '';
 
-    // Get first sentence if response is too long
-    if (cleaned.length > 150) {
-      const sentences = cleaned.split(/[.!?]+/);
-      if (sentences.length > 0 && sentences[0].trim()) {
-        cleaned = sentences[0].trim();
-        if (!cleaned.match(/[.!?]$/)) {
-          cleaned += '.';
+  // Try to split by sentences first
+  const sentences = text.split(/(?<=[.!?])\s+/);
+
+  for (const sentence of sentences) {
+    if ((currentPart + sentence).length <= maxLength) {
+      currentPart += (currentPart ? ' ' : '') + sentence;
+    } else {
+      if (currentPart) {
+        parts.push(currentPart);
+        currentPart = sentence;
+      } else {
+        // Sentence is too long, split by words
+        const words = sentence.split(' ');
+        for (const word of words) {
+          if ((currentPart + word).length <= maxLength) {
+            currentPart += (currentPart ? ' ' : '') + word;
+          } else {
+            if (currentPart) {
+              parts.push(currentPart);
+              currentPart = word;
+            } else {
+              // Word is too long, force split
+              parts.push(word.substring(0, maxLength));
+              currentPart = word.substring(maxLength);
+            }
+          }
         }
       }
     }
-
-    // Final length limit
-    if (cleaned.length > 200) {
-      cleaned = cleaned.substring(0, 197).trim() + '...';
-    }
-
-    return cleaned || "hmm, not sure about that";
-  } catch (error) {
-    console.error("Error cleaning response:", error);
-    return "sorry, had trouble with that response";
   }
+
+  if (currentPart) {
+    parts.push(currentPart);
+  }
+
+  return parts;
 }
 
-// Get AI response with fallback system
-async function getAIResponse(message) {
-  // Try Together AI first (primary)
+// Conversation history management
+function addToConversationHistory(channelId, role, content, author = null) {
+  const channelKey = String(channelId);
+  console.log(`🧠 Adding to conversation history: ${role} message in channel ${channelKey}`);
+
+  if (!conversationHistory.has(channelKey)) {
+    conversationHistory.set(channelKey, []);
+    console.log(`🆕 Created new conversation history for channel ${channelKey}`);
+  }
+
+  const history = conversationHistory.get(channelKey);
+  const messageContent = author ? `${author}: ${content}` : content;
+
+  history.push({
+    role: role,
+    content: messageContent
+  });
+
+  // Keep only last 8 messages (4 exchanges)
+  if (history.length > 8) {
+    const removed = history.splice(0, history.length - 8);
+    console.log(`🗑️ Removed ${removed.length} old messages from history`);
+  }
+
+  console.log(`📝 Added ${role} message. Total messages in channel ${channelKey}: ${history.length}`);
+  return history;
+}
+
+// Get conversation history for a channel
+function getConversationHistory(channelId) {
+  const channelKey = String(channelId);
+  if (!conversationHistory.has(channelKey)) {
+    console.log(`📭 No conversation history found for channel ${channelKey}`);
+    return [];
+  }
+
+  const history = conversationHistory.get(channelKey);
+  console.log(`📚 Retrieved ${history.length} messages from conversation history for channel ${channelKey}`);
+  return history;
+}
+
+// Get AI response with enhanced debugging
+async function getAIResponse(message, channelId, author) {
+  console.log(`🎯 Getting AI response for: "${message}" from ${author} in channel ${channelId}`);
+
+  // Add user message to conversation history
+  addToConversationHistory(channelId, "user", message, author);
+
+  // Get full conversation history
+  const history = getConversationHistory(channelId);
+
+  // Build messages for AI
+  const messages = [
+    {
+      role: "system",
+      content: "You are an experienced developer on Discord. When someone asks for code or technical help, provide complete, working solutions but keep them concise and focused. Aim for responses under 1800 characters to fit in a single Discord message. Be direct and comprehensive but not overly verbose. Remember previous messages in this conversation and reference the user by name when appropriate."
+    },
+    ...history
+  ];
+
+  console.log(`📤 Sending ${messages.length} messages to AI (1 system + ${history.length} conversation)`);
+
+  // Try Together AI first
   try {
-    console.log(`🔄 Calling Together AI (Primary)...`);
+    console.log(`🔄 Trying Together AI (Primary)...`);
 
     const response = await fetch(TOGETHER_API_URL, {
       method: "POST",
@@ -105,20 +180,11 @@ async function getAIResponse(message) {
       },
       body: JSON.stringify({
         model: PRIMARY_MODEL,
-        messages: [
-          {
-            role: "system",
-            content: "You are a casual, friendly person on Discord. Keep responses very short (1-2 sentences max), natural, and conversational. Be helpful but brief. No formal explanations or AI-speak. Respond like a real person would in a chat."
-          },
-          {
-            role: "user",
-            content: message
-          }
-        ],
-        max_tokens: 60,
-        temperature: 0.8,
-        top_p: 0.9,
-        stop: ["\n\n", "User:", "Assistant:"]
+        messages: messages,
+        max_tokens: 600, // Reduced to fit in single Discord message
+        temperature: 0.7,
+        top_p: 0.9
+        // Removed stop sequences - they were cutting off responses
       })
     });
 
@@ -126,21 +192,28 @@ async function getAIResponse(message) {
 
     if (response.ok) {
       const data = await response.json();
-
       if (data.choices && data.choices.length > 0 && data.choices[0].message) {
-        const aiText = data.choices[0].message.content;
-        const cleaned = cleanResponse(aiText);
-        console.log(`🤖 Together AI Response: "${cleaned}"`);
-        return cleaned;
+        const aiText = data.choices[0].message.content.trim();
+        console.log(`📏 Response length: ${aiText.length} characters`);
+        console.log(`🔍 Full AI response: "${aiText}"`);
+        console.log(`📊 Finish reason: ${data.choices[0].finish_reason || 'unknown'}`);
+
+        // Add AI response to conversation history
+        addToConversationHistory(channelId, "assistant", aiText);
+
+        console.log(`✅ Together AI Success`);
+        return aiText;
+      } else {
+        console.log(`❌ Together AI: Invalid response structure`);
+        console.log(`🔍 Response data:`, JSON.stringify(data, null, 2));
       }
     } else {
-      console.log(`⚠️ Together AI failed (${response.status}), trying fallback...`);
       throw new Error(`Together AI API error: ${response.status}`);
     }
 
   } catch (error) {
-    console.log(`❌ Together AI error: ${error.message}`);
-    console.log(`🔄 Switching to OpenRouter fallback...`);
+    console.log(`❌ Together AI failed: ${error.message}`);
+    console.log(`🔄 Trying OpenRouter fallback...`);
   }
 
   // Try OpenRouter fallback
@@ -157,18 +230,9 @@ async function getAIResponse(message) {
       },
       body: JSON.stringify({
         model: FALLBACK_MODEL,
-        messages: [
-          {
-            role: "system",
-            content: "You are a casual, friendly person on Discord. Keep responses very short (1-2 sentences max), natural, and conversational. Be helpful but brief. No formal explanations or AI-speak. Respond like a real person would in a chat."
-          },
-          {
-            role: "user",
-            content: message
-          }
-        ],
-        max_tokens: 60,
-        temperature: 0.8,
+        messages: messages,
+        max_tokens: 600, // Reduced to fit in single Discord message
+        temperature: 0.7,
         top_p: 0.9
       })
     });
@@ -177,12 +241,20 @@ async function getAIResponse(message) {
 
     if (response.ok) {
       const data = await response.json();
-
       if (data.choices && data.choices.length > 0 && data.choices[0].message) {
-        const aiText = data.choices[0].message.content;
-        const cleaned = cleanResponse(aiText);
-        console.log(`🤖 OpenRouter Response (Fallback): "${cleaned}"`);
-        return cleaned;
+        const aiText = data.choices[0].message.content.trim();
+        console.log(`📏 Response length: ${aiText.length} characters`);
+        console.log(`🔍 Full AI response: "${aiText}"`);
+        console.log(`📊 Finish reason: ${data.choices[0].finish_reason || 'unknown'}`);
+
+        // Add AI response to conversation history
+        addToConversationHistory(channelId, "assistant", aiText);
+
+        console.log(`✅ OpenRouter Success`);
+        return aiText;
+      } else {
+        console.log(`❌ OpenRouter: Invalid response structure`);
+        console.log(`🔍 Response data:`, JSON.stringify(data, null, 2));
       }
     } else {
       const errorText = await response.text();
@@ -190,30 +262,70 @@ async function getAIResponse(message) {
     }
 
   } catch (error) {
-    console.error("❌ OpenRouter fallback failed:", error);
+    console.error("❌ OpenRouter failed:", error);
   }
 
-  // Final fallback - smart static responses
-  console.log("🆘 Both APIs failed, using smart fallback responses");
+  // Final fallback - enhanced static responses
+  console.log("🆘 Both APIs failed, using enhanced static response");
 
   const lowerMessage = message.toLowerCase();
-  if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
-    return "hey there!";
-  }
-  if (lowerMessage.includes('how') && lowerMessage.includes('you')) {
-    return "I'm doing well, thanks!";
-  }
-  if (lowerMessage.includes('?')) {
-    return "hmm, good question!";
-  }
-  if (lowerMessage.includes('thanks') || lowerMessage.includes('thank')) {
-    return "you're welcome!";
-  }
-  if (lowerMessage.includes('bye') || lowerMessage.includes('goodbye')) {
-    return "see you later!";
+  let staticResponse = "";
+
+  if (lowerMessage.includes('fibonacci')) {
+    staticResponse = "Here's a basic Fibonacci checker:\n```javascript\nfunction isFibonacci(n) {\n  let a = 0, b = 1;\n  while (b < n) {\n    [a, b] = [b, a + b];\n  }\n  return b === n || n === 0;\n}\n```";
+  } else if (lowerMessage.includes('tailwind') || lowerMessage.includes('css')) {
+    staticResponse = "For Tailwind CSS on Ubuntu:\n```bash\nnpm install -D tailwindcss\nnpx tailwindcss init\n```\nThen add to your CSS:\n```css\n@tailwind base;\n@tailwind components;\n@tailwind utilities;\n```";
+  } else if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
+    staticResponse = "hey there! how's it going?";
+  } else if (lowerMessage.includes('?')) {
+    staticResponse = "that's a good question! having some technical issues but I'll try to help.";
+  } else {
+    staticResponse = "sorry, having some technical issues right now. try again in a moment!";
   }
 
-  return "sorry, having some technical issues right now";
+  // Add static response to history
+  addToConversationHistory(channelId, "assistant", staticResponse);
+
+  return staticResponse;
+}
+
+// Send message with Discord length handling - prefer single messages
+async function sendAIResponse(channelId, messageId, aiResponse) {
+  // Only split if absolutely necessary (over 1990 characters)
+  if (aiResponse.length <= DISCORD_SAFE_LENGTH) {
+    console.log(`📤 Sending single message: ${aiResponse.length} chars`);
+    try {
+      await replyToMessage(channelId, messageId, aiResponse);
+      console.log(`✅ Single message sent successfully`);
+    } catch (error) {
+      console.error(`❌ Failed to send message:`, error);
+    }
+    return;
+  }
+
+  // Only split if absolutely necessary
+  const messageParts = splitMessage(aiResponse);
+  console.log(`⚠️ Message too long (${aiResponse.length} chars), splitting into ${messageParts.length} parts`);
+
+  for (let i = 0; i < messageParts.length; i++) {
+    const part = messageParts[i];
+    const isLastPart = i === messageParts.length - 1;
+
+    console.log(`📤 Sending part ${i + 1}/${messageParts.length}: ${part.length} chars`);
+
+    try {
+      await replyToMessage(channelId, messageId, part);
+      console.log(`✅ Part ${i + 1} sent successfully`);
+
+      // Add small delay between parts to avoid rate limiting
+      if (!isLastPart) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch (error) {
+      console.error(`❌ Failed to send part ${i + 1}:`, error);
+      break; // Stop sending remaining parts if one fails
+    }
+  }
 }
 
 // Check for duplicate messages
@@ -243,7 +355,7 @@ async function handleMessage(message, author, channelId, messageId, context = {}
     const content = message || '';
     const lowerContent = content.toLowerCase().trim();
 
-    console.log(`📝 Processing: "${content}" from ${author} [${source}]`);
+    console.log(`📨 Processing message: "${content}" from ${author} [${source}]`);
 
     // Check if from monitored channel
     if (!MONITORED_CHANNELS.includes(channelId)) {
@@ -270,7 +382,9 @@ async function handleMessage(message, author, channelId, messageId, context = {}
       helpText += "- Tag me @username for responses in any mode\n";
       helpText += "- Reply to my messages to continue conversations\n";
       helpText += `- Current mode: ${RESPOND_TO_ALL_MESSAGES ? 'ON' : 'OFF'}\n`;
-      helpText += "- Primary: Llama 3.3 70B • Fallback: Mistral Small 24B ⚡";
+      helpText += "- Primary: Llama 3.3 70B • Fallback: DeepSeek R1 8B ⚡\n";
+      helpText += "- 🧠 **Conversation Memory: ENABLED**\n";
+      helpText += "- 🔍 **Enhanced Debugging: ENABLED**";
 
       await replyToMessage(channelId, messageId, helpText);
       return;
@@ -295,10 +409,8 @@ async function handleMessage(message, author, channelId, messageId, context = {}
     let shouldRespond = false;
 
     if (RESPOND_TO_ALL_MESSAGES) {
-      // ON mode: respond to all messages except replies to others
       shouldRespond = !isReply || isReplyToBot || isBotMentioned;
     } else {
-      // OFF mode: only respond to mentions and replies to bot
       shouldRespond = isBotMentioned || isReplyToBot;
     }
 
@@ -323,13 +435,13 @@ async function handleMessage(message, author, channelId, messageId, context = {}
       console.log(`📢 Responding: ON mode (all messages)`);
     }
 
-    // Get and send AI response
-    console.log(`⏱️ Getting AI response for: "${content}"`);
-    const aiResponse = await getAIResponse(content);
+    // Get and send AI response with conversation memory
+    console.log(`🚀 Getting AI response with conversation memory...`);
+    const aiResponse = await getAIResponse(content, channelId, author);
 
     if (aiResponse && aiResponse.trim()) {
-      console.log(`📤 Sending response: "${aiResponse}"`);
-      await replyToMessage(channelId, messageId, aiResponse);
+      console.log(`📏 Final response length: ${aiResponse.length} characters`);
+      await sendAIResponse(channelId, messageId, aiResponse);
       console.log(`✅ Response sent successfully`);
     } else {
       console.log(`❌ Empty AI response, not sending`);
@@ -347,17 +459,22 @@ async function handleMessage(message, author, channelId, messageId, context = {}
 
 // Start the bot
 async function startBot() {
-  console.log('🚀 Starting Discord AI Bot');
+  console.log('🚀 Starting Discord AI Bot with Enhanced Debugging');
   console.log(`👤 Admin: ${ADMIN_USERNAME}`);
   console.log(`📡 Monitoring channels: ${MONITORED_CHANNELS.join(', ')}`);
   console.log(`⚙️ Mode: ${RESPOND_TO_ALL_MESSAGES ? 'ON (all messages)' : 'OFF (mentions only)'}`);
   console.log(`🧠 Primary Model: ${PRIMARY_MODEL}`);
   console.log(`🔄 Fallback Model: ${FALLBACK_MODEL}`);
+  console.log(`📏 Max tokens: 600 (optimized for single Discord messages)`);
+  console.log(`💾 Conversation memory: ENABLED (per-channel, 8 message history)`);
+  console.log(`📱 Single message preference: ENABLED (1:1 response ratio)`);
+  console.log(`🔍 Enhanced debugging: ENABLED`);
 
   try {
     await startMonitoring(MONITORED_CHANNELS, handleMessage);
     console.log(`🎉 Bot is running! Hybrid monitoring active.`);
     console.log(`💡 Tip: Use !help for commands`);
+
   } catch (error) {
     console.error('❌ Failed to start bot:', error);
     process.exit(1);
@@ -367,6 +484,7 @@ async function startBot() {
 // Handle graceful shutdown
 process.on('SIGINT', () => {
   console.log('\n🛑 Shutting down bot...');
+  console.log(`💾 Final memory status: ${conversationHistory.size} active conversations`);
   process.exit(0);
 });
 
