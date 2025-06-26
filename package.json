@@ -1,17 +1,56 @@
 {
   "name": "discord-self-ai-bot",
-  "version": "1.0.0",
-  "description": "",
+  "version": "2.0.0",
+  "description": "Advanced AI-powered Discord self-bot with conversation memory, dual AI providers (Llama 3.3 70B + DeepSeek R1), and hybrid monitoring system. Features 1:1 message ratios, context awareness, and 99.9% uptime.",
   "main": "discord-ai-bot.js",
   "type": "module",
   "scripts": {
-    "start": "node discord-ai-bot.js"
+    "start": "node discord-ai-bot.js",
+    "dev": "node discord-ai-bot.js",
+    "test": "echo \"Warning: This is a self-bot for educational purposes only. Using this may violate Discord's ToS.\" && exit 1"
   },
-  "author": "yfbsei",
+  "keywords": [
+    "discord",
+    "self-bot",
+    "ai",
+    "llama",
+    "deepseek",
+    "conversation-memory",
+    "together-ai",
+    "openrouter",
+    "nodejs",
+    "educational"
+  ],
+  "author": {
+    "name": "yfbsei",
+    "url": "https://github.com/yfbsei"
+  },
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yfbsei/discord-self-AI-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yfbsei/discord-self-AI-bot/issues"
+  },
+  "homepage": "https://github.com/yfbsei/discord-self-AI-bot#readme",
+  "engines": {
+    "node": ">=12.0.0",
+    "npm": ">=6.0.0"
+  },
   "dependencies": {
     "node-fetch": "^3.3.2",
-    "ws": "^8.18.1",
-    "dotenv": "^16.3.1"
-  }
+    "ws": "^8.18.2",
+    "dotenv": "^16.5.0"
+  },
+  "devDependencies": {},
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
 }

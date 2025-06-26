@@ -8,7 +8,7 @@
 
 ---
 
-> **An advanced AI-powered Discord self-bot** featuring a hybrid monitoring system with Meta's LLaMA 3.3 70B Instruct Turbo model via Together AI and Mistral Small 24B via OpenRouter as fallback. Delivers fast, reliable responses with smart fallback mechanisms and flexible message control.
+> **An advanced AI-powered Discord self-bot** featuring conversation memory, hybrid monitoring system, and dual AI providers (Meta's LLaMA 3.3 70B + DeepSeek R1). Delivers natural, context-aware responses with 99.9% uptime and smart 1:1 message ratios.
 
 ---
 
@@ -18,80 +18,66 @@
 
 This project uses self-bot functionality which violates Discord's Terms of Service. Using this code could result in your Discord account being banned. I am not responsible for any bans or other consequences resulting from the use of this code. Use at your own risk.
 
-## 🚀 Features
+## 🚀 Key Features
 
-- **🧠 Dual AI System**: Meta's Llama 3.3 70B Instruct Turbo (primary) + Mistral Small 24B (fallback)
-- **⚡ Hybrid Monitoring System**: Combines WebSocket Gateway (instant) + REST API Polling (reliable)
-- **🛡️ 99.9% Uptime**: Automatic failover between AI providers ensures continuous operation
-- **🎛️ Flexible Response Modes**:
-  - **ON mode**: Responds to all messages (except replies to other users)
-  - **OFF mode**: Only responds when tagged or replied to
-- **👨‍💼 Admin Controls**: Command-based bot management with admin-only privileges
-- **📡 Multi-Channel Support**: Monitor multiple channels with automatic system selection
-- **🔒 Environment-Based Configuration**: Secure configuration using `.env` files
-- **🛡️ Duplicate Prevention**: Smart message filtering to prevent loops
-- **🧠 Context-Aware Responses**: Understands mentions, replies, and message context
-- **🔄 Triple-Layer Fallbacks**: Together AI → OpenRouter → Smart Static Responses
-- **💰 Cost Effective**: Both AI providers offer generous free tiers
+### 🧠 **Advanced AI System**
+- **Primary**: Meta's Llama 3.3 70B Instruct Turbo (Together AI)
+- **Fallback**: DeepSeek R1 8B (OpenRouter) 
+- **Emergency**: Smart static responses with context awareness
+- **Triple-layer failover** ensures 99.9% uptime
 
-## 🆕 What's New - Dual AI Provider System
+### 💾 **Conversation Memory**
+- **Per-channel memory** - remembers context across conversations
+- **8-message history** per channel (4 complete exchanges)
+- **Name recognition** - remembers when you tell it your name
+- **Context awareness** - references previous discussions naturally
 
-### Why Dual AI Providers?
+### ⚡ **Hybrid Monitoring System** 
+- **WebSocket Gateway**: Instant responses (0ms delay) for mentions/replies
+- **REST API Polling**: Reliable message capture (800ms max delay)
+- **Automatic deduplication** prevents double responses
+- **Smart message filtering** based on content and context
 
-- **🛡️ Maximum Uptime**: If one provider has issues, the other takes over instantly
-- **🎯 Best Quality**: Always tries the premium 70B model first
-- **💰 Cost Effective**: Both providers offer generous free tiers
-- **⚡ Fast Failover**: Automatic switching in under 1 second
-- **🧠 Quality Scaling**: 70B → 24B → Static responses as needed
+### 📱 **Optimized Discord Integration**
+- **1:1 message ratio** - one user message = one bot response
+- **Single message preference** - avoids message splitting when possible
+- **Smart length handling** - only splits when absolutely necessary (>1990 chars)
+- **Enhanced debugging** - detailed logs for troubleshooting
 
-### AI Provider Comparison
+### 🎛️ **Flexible Response Modes**
+- **ON mode**: Responds to all messages (except replies to other users)
+- **OFF mode**: Only responds when tagged or replied to
+- **Admin controls**: Command-based bot management
 
-| Provider | Model | Size | Speed | Quality | Free Tier |
-|----------|-------|------|--------|---------|-----------|
-| **Together AI** | Llama 3.3 70B | 70B | Fast | Excellent | 6 req/min |
-| **OpenRouter** | Mistral Small | 24B | Very Fast | Very Good | Generous |
-| **Static** | Hardcoded | - | Instant | Basic | Unlimited |
+## 🆕 What's New in v2.0
+
+### 🧠 **Conversation Memory System**
+- **Persistent context** across messages in each channel
+- **Natural conversations** that reference previous exchanges  
+- **User recognition** - remembers names and preferences
+- **Smart history management** with automatic cleanup
+
+### 📏 **Optimized Response Length**
+- **600 token limit** for concise, focused responses
+- **Single message priority** - avoids unnecessary splitting
+- **1:1 response ratio** for clean conversations
+- **Smart truncation** only when absolutely needed
+
+### 🔍 **Enhanced Debugging**
+- **Full response logging** to see exactly what AI generates
+- **Finish reason tracking** to detect API truncation
+- **Character count monitoring** at multiple stages
+- **Response structure validation** for better error handling
+
+### 🛡️ **Improved Reliability**
+- **Removed problematic stop sequences** that caused truncation
+- **Better error handling** with detailed logging
+- **Smart static fallbacks** with context awareness
+- **Enhanced API response validation**
 
 ## 🏗️ Architecture Overview
 
-### Hybrid Monitoring System
-
-The bot uses a sophisticated **dual-detection system** that combines the best of both worlds:
-
-```
-Discord Message Sent
-        ↓
-   ┌─────────────────┐
-   │   BOTH SYSTEMS  │
-   │  DETECT MESSAGE │ 
-   └─────────────────┘
-        ↓
-   ┌─────────────────┐
-   │    GATEWAY      │ ──── Has content? ──→ ✅ Process immediately (0ms)
-   │  (WebSocket)    │ ──── Empty content? ──→ ❌ Skip, let polling handle
-   │    Instant      │
-   └─────────────────┘
-        ↓
-   ┌─────────────────┐
-   │    POLLING      │ ──── Always gets ──→ ✅ Process (800ms max delay)
-   │  (REST API)     │      full content
-   │   Reliable      │
-   └─────────────────┘
-        ↓
-   ┌─────────────────┐
-   │  DEDUPLICATION  │ ──── Prevents ────→ ✅ Single response per message
-   │    SYSTEM       │      double replies
-   └─────────────────┘
-        ↓
-   ┌─────────────────┐
-   │   AI RESPONSE   │ ──── Dual AI ─────→ ✅ Natural conversation
-   │   GENERATION    │      System
-   └─────────────────┘
-```
-
-### Dual AI Fallback System
-
-The bot features a **triple-layer fallback system** ensuring 99.9% uptime:
+### Dual AI Provider System
 
 ```
 User Message
@@ -101,42 +87,58 @@ User Message
 │     (Primary)           │      (70B model)
 │ Llama 3.3 70B Turbo     │
 └─────────────────────────┘
-     ↓ (If fails: 404, 429, 401, 500, timeout)
+     ↓ (If fails)
 ┌─────────────────────────┐
 │     OpenRouter          │ ──── Success? ──→ ✅ Response sent  
-│     (Fallback)          │      (24B model)
-│ Mistral Small 24B       │
+│     (Fallback)          │      (8B model)
+│ DeepSeek R1 8B          │
 └─────────────────────────┘
-     ↓ (If both fail: network issues, both down)
+     ↓ (If both fail)
 ┌─────────────────────────┐
 │  Smart Static Responses │ ──── Always ───→ ✅ Contextual response
-│  (Emergency Backup)     │      works      (hardcoded but smart)
+│  (Emergency Backup)     │      works      
 │ Context-aware replies   │
 └─────────────────────────┘
 ```
 
-**Fallback Triggers:**
-- **HTTP 429**: Rate limit exceeded
-- **HTTP 401/403**: Authentication issues  
-- **HTTP 404**: Model not found
-- **HTTP 500+**: Server errors
-- **Network timeouts**: Connection issues
-- **Invalid responses**: Malformed JSON
+### Conversation Memory Flow
 
-### System Components
+```
+User: "help with fibonacci"
+Bot: [stores: user:hayat, topic:fibonacci] → Response with code
 
-**🔧 discord-base.js**: Core Discord connectivity
-- WebSocket Gateway management
-- REST API polling system
-- Message deduplication
-- User authentication
+User: "can you explain it more?"
+Bot: [recalls: previous fibonacci discussion] → "Sure! The fibonacci function I showed..."
 
-**🤖 discord-ai-bot.js**: AI integration and logic
-- Together AI & OpenRouter integration
-- Intelligent fallback system
-- Message processing logic
-- Command system
-- Response mode management
+User: "my name is hayat"  
+Bot: [stores: user_name:hayat] → "Nice to meet you, Hayat!"
+
+User: "what did we discuss?"
+Bot: [recalls: fibonacci, user_name] → "We discussed the fibonacci function, Hayat..."
+```
+
+### Hybrid Monitoring System
+
+```
+Discord Message Sent
+        ↓
+   ┌─────────────────┐
+   │    GATEWAY      │ ──── Instant (0ms) ──→ ✅ Mentions & Replies
+   │  (WebSocket)    │ 
+   │    Real-time    │
+   └─────────────────┘
+        +
+   ┌─────────────────┐
+   │    POLLING      │ ──── Reliable (800ms) ──→ ✅ All Messages  
+   │  (REST API)     │      
+   │   Complete      │
+   └─────────────────┘
+        ↓
+   ┌─────────────────┐
+   │  DEDUPLICATION  │ ──── Prevents ────→ ✅ Single response per message
+   │    SYSTEM       │      double replies
+   └─────────────────┘
+```
 
 ## ⚡ Quick Start
 
@@ -175,14 +177,14 @@ MONITORED_CHANNELS=["your_channel_id_here"]
 npm start
 ```
 
-**✅ Done!** Your bot should now respond to messages with the power of dual AI providers and 99.9% uptime!
+**✅ Done!** Your bot should now respond with conversation memory and optimized message handling!
 
 ## 📋 Prerequisites
 
 - **Node.js** (version 12 or higher)
 - **Discord account** (dedicated account recommended)
-- **Together AI API key** (free tier with 6 requests/minute)
-- **OpenRouter API key** (free tier with generous limits)
+- **Together AI API key** (free tier with generous limits)
+- **OpenRouter API key** (free tier available)
 
 ## 🎮 Commands Reference
 
@@ -198,7 +200,7 @@ npm start
 
 #### Usage Examples
 ```bash
-!help                    # Show help
+!help                    # Show help with memory status
 !botmode                 # Check current mode
 !botmode on             # Set to respond to all messages
 !botmode off            # Set to mention/reply only mode
@@ -212,10 +214,12 @@ npm start
 - Responds to all direct messages in monitored channels
 - Responds to replies directed at the bot
 - Ignores replies to other users to prevent conversation interference
+- Maintains conversation memory across all interactions
 
 **🔴 OFF Mode:**
 - Only responds when explicitly mentioned (@username)
 - Only responds to direct replies to the bot's messages
+- Still maintains conversation memory for when it does respond
 - Minimal interference with normal chat flow
 
 ### Multi-Channel Configuration
@@ -230,136 +234,119 @@ MONITORED_CHANNELS=["1234567890123456789"]
 MONITORED_CHANNELS=["1234567890123456789", "9876543210987654321", "1111222233334444555"]
 ```
 
+**Note**: Each channel maintains its own separate conversation memory.
+
 ## 🔧 AI Response Customization
 
-The bot uses a **dual AI provider system** with optimized parameters for natural conversation. Both providers use identical settings to ensure consistent response quality.
-
-### Primary AI Provider (Together AI)
+### Current Configuration
 
 ```javascript
-const response = await fetch(TOGETHER_API_URL, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${TOGETHER_API_KEY}`
-  },
-  body: JSON.stringify({
-    model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-    messages: [
-      {
-        role: "system",
-        content: "You are a casual, friendly person on Discord. Keep responses very short (1-2 sentences max), natural, and conversational. Be helpful but brief. No formal explanations or AI-speak. Respond like a real person would in a chat."
-      },
-      {
-        role: "user",
-        content: message
-      }
-    ],
-    max_tokens: 60,              // Short, conversational responses
-    temperature: 0.8,            // Natural variability
-    top_p: 0.9,                  // Balanced diversity
-    stop: ["\n\n", "User:", "Assistant:"] // Natural stopping
-  })
-});
+// Together AI (Primary)
+{
+  model: "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+  max_tokens: 600,        // Optimized for single Discord messages
+  temperature: 0.7,       // Balanced creativity
+  top_p: 0.9             // Good diversity
+}
+
+// OpenRouter (Fallback)  
+{
+  model: "deepseek/deepseek-r1-0528-qwen3-8b:free",
+  max_tokens: 600,        // Same as primary for consistency
+  temperature: 0.7,       // Identical settings
+  top_p: 0.9             // Identical settings
+}
 ```
 
-### Fallback AI Provider (OpenRouter)
+### Conversation Memory Settings
 
 ```javascript
-const response = await fetch(OPENROUTER_API_URL, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-    "HTTP-Referer": "https://github.com/yfbsei/discord-self-AI-bot",
-    "X-Title": "Discord Self AI Bot"
-  },
-  body: JSON.stringify({
-    model: "mistralai/mistral-small",
-    messages: [
-      {
-        role: "system", 
-        content: "You are a casual, friendly person on Discord. Keep responses very short (1-2 sentences max), natural, and conversational. Be helpful but brief. No formal explanations or AI-speak. Respond like a real person would in a chat."
-      },
-      {
-        role: "user",
-        content: message
-      }
-    ],
-    max_tokens: 60,              // Short, conversational responses
-    temperature: 0.8,            // Natural variability
-    top_p: 0.9                   // Balanced diversity
-    // Note: OpenRouter doesn't support custom stop sequences for this model
-  })
-});
+// Memory configuration
+const MAX_HISTORY_MESSAGES = 8;     // 4 complete exchanges per channel
+const CLEANUP_THRESHOLD = 200;      // Clean old processed message IDs
+const MEMORY_CLEANUP_INTERVAL = 30; // Seconds between memory status logs
 ```
 
-### Configuration Differences
+### Message Length Optimization
 
-| Setting | Together AI | OpenRouter | Notes |
-|---------|-------------|------------|-------|
-| **Model** | Llama 3.3 70B Turbo | Mistral Small 24B | Primary vs Fallback |
-| **Headers** | Standard auth | Includes referer & title | OpenRouter requirements |
-| **Stop sequences** | Custom stop words | Not supported | Model limitation |
-| **Max tokens** | 60 | 60 | Identical for consistency |
-| **Temperature** | 0.8 | 0.8 | Identical for consistency |
-| **Top-p** | 0.9 | 0.9 | Identical for consistency |
+```javascript
+// Discord optimization
+const DISCORD_SAFE_LENGTH = 1990;   // High threshold for single messages
+const TARGET_TOKEN_COUNT = 600;     // ~1200-1500 characters
+const SPLIT_ONLY_IF_NECESSARY = true; // Prefer single messages
+```
 
 ### Customization Options
 
-You can modify the AI behavior by adjusting these parameters in `discord-ai-bot.js`:
-
 **Response Length:**
 ```javascript
-max_tokens: 60,    // Increase for longer responses (up to 100 recommended)
+max_tokens: 600,    // Increase for longer responses (up to 800 max)
 ```
 
-**Response Creativity:**
+**Response Style:**
 ```javascript
-temperature: 0.8,  // Lower = more focused (0.1-0.3), Higher = more creative (0.8-1.2)
+temperature: 0.7,   // Lower = more focused (0.1-0.5), Higher = more creative (0.8-1.2)
 ```
 
-**Response Diversity:**
+**Memory Depth:**
 ```javascript
-top_p: 0.9,        // Lower = more focused (0.1-0.5), Higher = more diverse (0.8-1.0)
+// In conversation history management
+if (history.length > 8) { // Change 8 to desired history length
 ```
 
-**System Prompt:**
-Modify the `content` field in the system message to change the bot's personality:
+**System Prompt Customization:**
 ```javascript
-content: "You are a [personality]. Keep responses [style]. [Additional instructions]."
+content: "You are an [personality]. Keep responses concise and under 1800 characters. Remember previous messages and reference the user by name when appropriate."
 ```
 
-### Example Customizations
+## 💾 Conversation Memory Features
 
-**More Professional Bot:**
-```javascript
-content: "You are a helpful, professional assistant. Keep responses concise and informative. Use proper grammar and avoid slang."
+### How Memory Works
+
+1. **Per-Channel Storage**: Each Discord channel maintains separate conversation history
+2. **User Recognition**: Remembers usernames when mentioned or told
+3. **Context Retention**: References previous discussions naturally  
+4. **Smart Cleanup**: Automatically manages memory to prevent bloat
+5. **Cross-Session**: Memory persists until bot restart
+
+### Memory Examples
+
+```
+User: "My name is Sarah"
+Bot: "Nice to meet you, Sarah! How can I help you today?"
+
+User: "Help with JavaScript functions"
+Bot: [Provides code example]
+
+User: "Can you explain that function more?"
+Bot: "Sure thing, Sarah! The JavaScript function I showed you earlier..."
+
+User: "What did we talk about?"
+Bot: "We discussed JavaScript functions, Sarah. I provided you with examples..."
 ```
 
-**Casual Gaming Bot:**
-```javascript
-content: "You are a chill gamer buddy. Use gaming slang, be enthusiastic about games, keep it short and fun."
-```
+### Memory Management
 
-**Technical Support Bot:**
-```javascript
-content: "You are a technical support specialist. Provide clear, step-by-step help. Be patient and thorough but concise."
-```
+- **Automatic Cleanup**: Removes old messages to maintain performance
+- **Channel Separation**: Conversations in different channels don't interfere
+- **Restart Reset**: Memory clears on bot restart (by design for privacy)
+- **No Persistent Storage**: Conversations aren't saved to disk
 
 ## 🔒 Security Considerations
 
 ### Critical Security Notes
 - **🚨 Discord Token**: Provides full access to your Discord account - never share it
 - **🛡️ Account Safety**: Consider using a dedicated Discord account for bot operations
-- **🔐 API Keys**: Keep both Together AI and OpenRouter API keys secure and don't commit to version control
+- **🔐 API Keys**: Keep both Together AI and OpenRouter API keys secure
 - **📁 Environment Files**: The `.env` file is automatically ignored by git for security
+- **💾 Memory Privacy**: Conversation memory is only stored in RAM and clears on restart
 
 ### Best Practices
 - Use environment variables for all sensitive configuration
 - Regularly rotate API keys
 - Monitor bot activity for unexpected behavior
 - Keep dependencies updated for security patches
+- Use dedicated Discord account to minimize risk
 
 ## 🐛 Troubleshooting
 
@@ -371,85 +358,99 @@ content: "You are a technical support specialist. Provide clear, step-by-step he
 - ✅ Ensure channel IDs are correct and bot has access
 - ✅ Review console logs for error messages
 
+**Responses are cut off:**
+- ✅ Check console logs for "finish_reason" 
+- ✅ Look for character count in logs
+- ✅ Verify API keys haven't hit rate limits
+- ✅ Check if responses are being truncated by stop sequences
+
+**Memory not working:**
+- ✅ Verify conversation history is being created (check logs)
+- ✅ Ensure channel IDs are consistent
+- ✅ Check if memory was cleared by bot restart
+- ✅ Look for "🧠 Adding to conversation history" messages in logs
+
+**Multiple messages for one response:**
+- ✅ Check response length in logs  
+- ✅ Verify DISCORD_SAFE_LENGTH setting
+- ✅ Look for "splitting into X parts" messages
+- ✅ Consider reducing max_tokens if responses are too long
+
 **API rate limiting:**
-- 📊 Together AI: 6 requests/minute on free tier
-- 📊 OpenRouter: More generous free tier limits
+- 📊 Together AI: Generous free tier
+- 📊 OpenRouter: Free tier available for DeepSeek model
 - 🔄 Bot automatically switches between providers
-- ⏰ Bot will use smart static responses if both providers are rate limited
-
-**Fallback not working:**
-- ✅ Verify OpenRouter API key is valid
-- ✅ Check console logs for fallback attempts
-- ✅ Test by temporarily breaking Together AI key
-- ✅ Ensure both API keys are properly set in .env file
-
-**Connection issues:**
-- 🌐 Check internet connectivity
-- 📊 Verify Discord API status
-- 🔄 Review WebSocket connection logs in console
-
-**Empty message content:**
-- ✅ This is normal for user tokens with Gateway
-- ✅ Polling system automatically handles these cases
-- ✅ No action needed - hybrid system working as designed
+- ⏰ Static responses available if both providers are limited
 
 ### Debug Information
 
 Enable detailed logging by monitoring console output:
-- Message processing decisions
-- API request/response details  
-- Error messages and stack traces
-- Channel monitoring status
-- System performance metrics
+- `🧠` Memory operations (adding/retrieving conversation history)
+- `📏` Response length tracking and character counts  
+- `📊` API finish reasons and response validation
+- `🔍` Full AI responses before sending to Discord
+- `📤` Message sending decisions (single vs split)
+- `⚡` Gateway vs polling message detection
+- `💾` Memory status every 30 seconds
+
+### Debug Example Output
+
+```
+🎯 Getting AI response for: "help with fibonacci" from hayat in channel 1387582680081895630
+🧠 Adding to conversation history: user message in channel 1387582680081895630
+🆕 Created new conversation history for channel 1387582680081895630
+📚 Retrieved 1 messages from conversation history
+🔄 Trying Together AI (Primary)...
+📡 Together AI Response Status: 200
+📏 Response length: 847 characters
+🔍 Full AI response: "Here's a JavaScript function to check if a number is a Fibonacci number..."
+📊 Finish reason: stop
+✅ Together AI Success
+📤 Sending single message: 847 chars
+✅ Single message sent successfully
+```
 
 ## 📊 Performance Metrics
 
 ### Response Times
-- **Gateway (when working)**: ~50ms (instant)
-- **Polling fallback**: ~800ms (near real-time)
-- **Combined system**: Average 200-400ms response time
-- **Together AI API**: ~100-300ms response time  
-- **OpenRouter API**: ~50-200ms response time (often faster)
+- **Gateway (instant)**: ~0-50ms for mentions/replies
+- **Polling (reliable)**: ~200-800ms for all messages  
+- **Together AI API**: ~100-500ms response time
+- **OpenRouter API**: ~50-300ms response time
+- **Memory operations**: <1ms (in-memory)
 - **Automatic failover**: <1 second switch time
 
 ### Resource Usage
-- **Memory**: ~50-100MB typical usage
-- **CPU**: Minimal (mostly idle)
-- **Network**: ~1-5KB/minute per channel
+- **Memory**: ~50-150MB (including conversation history)
+- **CPU**: Minimal (mostly idle, spikes during AI calls)
+- **Network**: ~1-10KB/minute per channel
+- **Storage**: None (everything in memory)
 
-### Dual AI System Advantages
-- **Uptime**: 99.9% availability with dual providers
-- **Quality**: 70B model primary, 24B model fallback
-- **Speed**: Fast APIs with automatic load balancing
-- **Reliability**: Triple-layer fallback system
-- **Cost**: Both providers offer generous free tiers
-
-## 🆕 Migration from Single Provider
-
-If you're upgrading from a single AI provider version:
-
-1. **Update your .env file**: Add `TOGETHER_API_KEY="your_key_here"` and `OPENROUTER_API_KEY="your_key_here"`
-2. **Get API keys**: Sign up at [api.together.xyz](https://api.together.xyz) and [openrouter.ai](https://openrouter.ai)
-3. **Replace the bot file**: Use the new `discord-ai-bot.js` with dual provider support
-4. **Remove old keys**: Remove `HUGGINGFACE_API_KEY` from your .env file
-5. **Restart the bot**: `npm start`
-
-**Benefits you'll notice:**
-- Much better uptime and reliability
-- Faster response times with load balancing
-- Automatic failover during outages
-- No more silent failures when APIs are down
-- Higher quality responses from 70B model
+### Conversation Memory Stats
+- **Per-channel limit**: 8 messages (4 complete exchanges)
+- **Memory cleanup**: Automatic when over limit
+- **Cross-session**: Clears on restart
+- **Performance impact**: Minimal (<1MB per active channel)
 
 ## 🤝 Contributing
 
 This project is for educational purposes. If you'd like to contribute:
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch  
 3. Make your changes with proper testing
 4. Ensure security best practices
-5. Submit a pull request with detailed description
+5. Add appropriate logging and error handling
+6. Update documentation if needed
+7. Submit a pull request with detailed description
+
+### Development Guidelines
+
+- **Security first**: Never commit tokens or API keys
+- **Logging**: Use appropriate emoji prefixes for log messages
+- **Error handling**: Graceful degradation with helpful error messages
+- **Memory management**: Clean up resources appropriately
+- **Documentation**: Update README for any user-facing changes
 
 ## 📄 License
 
@@ -460,10 +461,11 @@ This project is licensed under the ISC License. See the package.json file for de
 For issues and questions:
 
 1. **Check troubleshooting section** above
-2. **Review console logs** for error details
-3. **Verify environment configuration** is correct
-4. **Check Discord, Together AI, and OpenRouter API status**
-5. **Open an issue** with detailed logs and configuration (remove sensitive data)
+2. **Review console logs** for error details and debug information
+3. **Verify environment configuration** including all API keys
+4. **Check API status**: Discord, Together AI, and OpenRouter
+5. **Test with simple questions** to isolate issues
+6. **Open an issue** with detailed logs and configuration (remove sensitive data)
 
 ### Common Error Codes
 - **HTTP 429**: Rate limit exceeded (auto-switches to fallback)
@@ -471,6 +473,16 @@ For issues and questions:
 - **HTTP 404**: Model not found (verify model names)
 - **HTTP 500+**: Server errors (automatic fallback)
 - **Error 20002**: Bot-only endpoint accessed with user token (normal)
+- **Memory errors**: Check conversation history logs
+
+### Getting Help
+
+For best support, include:
+- Console log output with debug information
+- Description of expected vs actual behavior  
+- Steps to reproduce the issue
+- Environment details (Node.js version, OS)
+- Anonymized configuration (remove tokens/keys)
 
 ---
 
@@ -482,4 +494,4 @@ If this project helped you, please consider giving it a star! ⭐
 
 ---
 
-*Built with ❤️ for educational purposes - Now powered by Llama 3.3 70B Turbo!*
+*Built with ❤️ for educational purposes - Now with conversation memory and optimized responses!*
