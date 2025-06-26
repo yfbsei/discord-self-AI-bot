@@ -1,12 +1,66 @@
-# Discord Bot Configuration - REQUIRED
-USER_TOKEN="user token of account to be botify"
+# Discord Self-Bot Configuration
+# ================================
 
-# Hugging Face API Configuration - REQUIRED
-HUGGINGFACE_API_KEY=""
+# Discord User Token (REQUIRED)
+# Get this from Discord Developer Tools > Network > Authorization header
+USER_TOKEN="your_discord_user_token_here"
 
-# Admin Configuration - REQUIRED
-ADMIN_USERNAME="my discord username"
+# Hugging Face API Key (REQUIRED)
+# Get free key from: https://huggingface.co/settings/tokens
+HUGGINGFACE_API_KEY="your_huggingface_api_key_here"
 
-# Channel Configuration - REQUIRED (JSON format)
-# Add your channel IDs and configuration here
-MONITORED_CHANNELS=[{"id":"CHANNEL_ID_1","usePolling":false,"pollInterval":5000},{"id":"CHANNEL_ID_2","usePolling":false,"pollInterval":5000},{"id":"CHANNEL_ID_3","usePolling":true,"pollInterval":3000}]
+# Admin Username (REQUIRED)
+# Your exact Discord username (case-sensitive)
+ADMIN_USERNAME="your_discord_username"
+
+# Monitored Channels (REQUIRED)
+# Simple array of channel IDs - get by right-clicking channel in Discord
+MONITORED_CHANNELS=["1387582684081895630"]
+
+# ================================
+# EXAMPLES:
+# ================================
+
+# Single channel:
+# MONITORED_CHANNELS=["1233567890123456789"]
+
+# Multiple channels:
+# MONITORED_CHANNELS=["1234567890123456789", "9876543210987654321", "1111222233334444555"]
+
+# ================================
+# HOW TO GET VALUES:
+# ================================
+
+# USER_TOKEN:
+# 1. Open Discord in browser
+# 2. Press F12 (Developer Tools)
+# 3. Go to Network tab
+# 4. Send any message in Discord
+# 5. Look for "messages" request
+# 6. Find "Authorization" header
+# 7. Copy the value (starts with your token)
+
+# HUGGINGFACE_API_KEY:
+# 1. Go to https://huggingface.co
+# 2. Sign up/Login
+# 3. Go to Settings > Access Tokens
+# 4. Create new token
+# 5. Copy the token value
+
+# ADMIN_USERNAME:
+# Your Discord username exactly as shown in Discord
+# Example: "hayat0003" or "john_doe"
+
+# MONITORED_CHANNELS:
+# 1. Enable Discord Developer Mode (Settings > Advanced > Developer Mode)
+# 2. Right-click any channel
+# 3. Click "Copy Channel ID"
+# 4. Paste into the array
+
+# ================================
+# SECURITY NOTES:
+# ================================
+# - Never share your USER_TOKEN with anyone
+# - Never commit .env file to version control
+# - Use a dedicated Discord account for bot operations
+# - Keep API keys secure

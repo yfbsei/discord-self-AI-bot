@@ -1,28 +1,24 @@
-// discord-base.js with polling support and environment variables
+// discord-base.js - Clean refactored version
 import fetch from 'node-fetch';
 import { WebSocket } from 'ws';
 import dotenv from 'dotenv';
 
-// Load environment variables
 dotenv.config();
 
-// Your existing user token from environment
 const USER_TOKEN = process.env.USER_TOKEN;
 const API_VERSION = '9';
 
-// Validate required environment variables
 if (!USER_TOKEN) {
   console.error('ERROR: USER_TOKEN is required in .env file');
   process.exit(1);
 }
 
-// We'll fetch the user ID dynamically rather than hardcoding it
-let MY_USER_ID = null; // leave it as null
-
-// Store message IDs we've seen from polling to avoid duplicates
+let MY_USER_ID = null;
+let MY_USERNAME = null;
 const processedMessageIds = new Set();
+const pollingIntervals = new Map();
 
-// Function to make API requests to Discord
+// Discord API request helper
 async function discordRequest(endpoint, options = {}) {
   const url = `https://discord.com/api/v${API_VERSION}/${endpoint}`;
   const headers = {
@@ -31,17 +27,14 @@ async function discordRequest(endpoint, options = {}) {
     ...options.headers
   };
 
-  const response = await fetch(url, {
-    headers,
-    ...options
-  });
+  const response = await fetch(url, { headers, ...options });
 
   if (!response.ok) {
     try {
       const data = await response.json();
       console.error('API Error:', data);
     } catch (e) {
-      console.error('API Error (no JSON):', response.status, response.statusText);
+      console.error('API Error:', response.status, response.statusText);
     }
     throw new Error(`Discord API error: ${response.status}`);
   }
@@ -49,7 +42,21 @@ async function discordRequest(endpoint, options = {}) {
   return response.json();
 }
 
-// Reply to a specific message
+// Get current user info
+async function getCurrentUser() {
+  try {
+    const userData = await discordRequest('users/@me');
+    MY_USER_ID = userData.id;
+    MY_USERNAME = userData.username;
+    console.log(`🤖 Authenticated as: ${userData.username} (ID: ${MY_USER_ID})`);
+    return userData;
+  } catch (error) {
+    console.error('Failed to get user data:', error);
+    throw error;
+  }
+}
+
+// Send reply to a message
 async function replyToMessage(channelId, messageId, content) {
   return discordRequest(`channels/${channelId}/messages`, {
     method: 'POST',
@@ -64,96 +71,92 @@ async function replyToMessage(channelId, messageId, content) {
   });
 }
 
-// Get current user information (to properly identify our own messages)
-async function getCurrentUser() {
+// Enhanced mention detection
+function checkForMention(messageContent, mentions = []) {
+  if (!messageContent) return false;
+
+  const content = messageContent.toLowerCase();
+
+  // Check Discord mentions array
+  if (mentions && Array.isArray(mentions)) {
+    if (mentions.some(mention => mention.id === MY_USER_ID)) return true;
+  }
+
+  // Check for username mentions
+  if (MY_USERNAME && content.includes(MY_USERNAME.toLowerCase())) {
+    return true;
+  }
+
+  // Check for user ID mentions
+  if (MY_USER_ID && content.includes(MY_USER_ID)) {
+    return true;
+  }
+
+  return false;
+}
+
+// Safe message fetching (handles user token limitations)
+async function safeGetRepliedMessage(channelId, messageId) {
   try {
-    const userData = await discordRequest('users/@me');
-    MY_USER_ID = userData.id;
-    console.log(`Authenticated as user: ${userData.username} (ID: ${MY_USER_ID})`);
-    return userData;
+    return await discordRequest(`channels/${channelId}/messages/${messageId}`);
   } catch (error) {
-    console.error('Failed to get current user data:', error);
-    throw error;
+    console.log(`⚠️ Cannot fetch replied message (user token limitation)`);
+    return null;
   }
 }
 
-// Read messages from a channel (most recent)
-async function getChannelMessages(channelId, limit = 50) {
-  return discordRequest(`channels/${channelId}/messages?limit=${limit}`);
-}
-
-// Send a message to a channel
-async function sendMessage(channelId, content) {
-  return discordRequest(`channels/${channelId}/messages`, {
-    method: 'POST',
-    body: JSON.stringify({ content })
-  });
-}
-
-// Poll for new messages in a channel
-async function pollChannel(channelId, messageHandler, interval = 5000) {
-  console.log(`Starting polling for channel ${channelId} at ${interval}ms intervals`);
+// Polling system for reliable message reading
+async function startPolling(channelId, messageHandler) {
+  console.log(`📡 Starting polling for channel ${channelId}`);
   let lastMessageId = null;
 
-  // Initial fetch to get last message ID
+  // Get initial last message ID
   try {
     const initialMessages = await discordRequest(`channels/${channelId}/messages?limit=1`);
     if (initialMessages.length > 0) {
       lastMessageId = initialMessages[0].id;
-      console.log(`Initial last message ID for channel ${channelId}: ${lastMessageId}`);
     }
   } catch (error) {
-    console.error(`Error fetching initial messages for channel ${channelId}:`, error);
+    console.error(`Error getting initial messages for ${channelId}:`, error);
   }
 
-  // Set up polling interval
   const pollInterval = setInterval(async () => {
     try {
-      // Get the latest messages from the channel
-      const messages = await discordRequest(`channels/${channelId}/messages?limit=5`);
+      const messages = await discordRequest(`channels/${channelId}/messages?limit=3`);
 
-      // Process new messages (newest first)
       for (const message of messages) {
-        // Skip if we've already processed this message
+        // Skip if already processed or old
         if (processedMessageIds.has(message.id) ||
           (lastMessageId && message.id <= lastMessageId)) {
           continue;
         }
 
-        // Skip if it's from your own account
-        if (message.author.id === MY_USER_ID) continue;
-
-        // Skip if it's from a bot
-        if (message.author.bot) continue;
-
-        console.log(`[POLL] New message in ${channelId} from ${message.author.username}: ${message.content}`);
-
-        // Check if this message mentions the bot
-        let isBotMentioned = false;
-        if (message.mentions && Array.isArray(message.mentions)) {
-          isBotMentioned = message.mentions.some(mention => mention.id === MY_USER_ID);
+        // Skip own messages and bots
+        if (message.author.id === MY_USER_ID || message.author.bot) {
+          continue;
         }
 
-        // Check if this is a reply
-        const isReply = message.message_reference ? true : false;
+        console.log(`📨 [POLLING] New message from ${message.author.username}: "${message.content}"`);
 
-        // If it's a reply, check if it's replying to the bot
+        // Check for mentions and replies
+        const isBotMentioned = checkForMention(message.content, message.mentions);
+        const isReply = !!message.message_reference;
+
         let isReplyToBot = false;
         if (isReply && message.message_reference) {
-          try {
-            const repliedToMessage = await discordRequest(
-              `channels/${message.channel_id}/messages/${message.message_reference.message_id}`
-            );
-            isReplyToBot = repliedToMessage.author.id === MY_USER_ID;
-          } catch (error) {
-            console.error('Error fetching replied-to message:', error);
+          const repliedMessage = await safeGetRepliedMessage(
+            message.channel_id,
+            message.message_reference.message_id
+          );
+          if (repliedMessage) {
+            isReplyToBot = repliedMessage.author.id === MY_USER_ID;
           }
         }
 
-        // Add to processed messages
+        // Mark as processed
         processedMessageIds.add(message.id);
 
-        // Process the message using the message handler
+        // Process the message
         if (messageHandler) {
           await messageHandler(
             message.content,
@@ -164,202 +167,178 @@ async function pollChannel(channelId, messageHandler, interval = 5000) {
               isReply,
               isReplyToBot,
               isBotMentioned,
-              hasAttachments: message.attachments && message.attachments.length > 0
+              hasAttachments: message.attachments && message.attachments.length > 0,
+              source: 'polling'
             }
           );
         }
       }
 
-      // Update the last seen message ID if we found new messages
+      // Update last message ID
       if (messages.length > 0) {
         lastMessageId = messages[0].id;
       }
 
-      // Clean up old message IDs from the processed set (keep last 100)
-      if (processedMessageIds.size > 100) {
-        const toRemove = processedMessageIds.size - 100;
-        const idsArray = Array.from(processedMessageIds);
-        for (let i = 0; i < toRemove; i++) {
-          processedMessageIds.delete(idsArray[i]);
-        }
+      // Cleanup old processed IDs
+      if (processedMessageIds.size > 200) {
+        const oldIds = Array.from(processedMessageIds).slice(0, 100);
+        oldIds.forEach(id => processedMessageIds.delete(id));
       }
+
     } catch (error) {
       console.error(`Error polling channel ${channelId}:`, error);
     }
-  }, interval);
+  }, 800); // Poll every 0.8 seconds for near-instant responses
 
-  // Return the interval handle so it can be cleared if needed
+  pollingIntervals.set(channelId, pollInterval);
   return pollInterval;
 }
 
-// Connect to Discord Gateway and listen for new messages
-// Now accepts a custom messageHandler function as a parameter
-async function listenForMessages(messageHandler = null) {
-  // First, get our own user ID if we don't have it yet
+// Gateway system for instant mentions/replies
+async function startGateway(messageHandler) {
+  console.log(`⚡ Starting Gateway for instant responses`);
+
+  try {
+    const gateway = await discordRequest('gateway');
+    const ws = new WebSocket(`${gateway.url}?v=${API_VERSION}&encoding=json`);
+
+    let heartbeatInterval;
+    let sequence = null;
+
+    ws.on('open', () => {
+      console.log('🔗 Connected to Discord Gateway');
+    });
+
+    ws.on('message', async (data) => {
+      const payload = JSON.parse(data);
+      const { op, d, s, t } = payload;
+
+      if (s) sequence = s;
+
+      switch (op) {
+        case 10: // Hello
+          heartbeatInterval = setInterval(() => {
+            ws.send(JSON.stringify({ op: 1, d: sequence }));
+          }, d.heartbeat_interval);
+
+          // Identify
+          ws.send(JSON.stringify({
+            op: 2,
+            d: {
+              token: USER_TOKEN,
+              properties: {
+                $os: 'windows',
+                $browser: 'discord_desktop',
+                $device: 'desktop'
+              },
+              intents: 513 // GUILDS + GUILD_MESSAGES
+            }
+          }));
+          break;
+
+        case 0: // Event
+          if (t === 'MESSAGE_CREATE') {
+            // Skip own messages and bots
+            if (d.author.id === MY_USER_ID || d.author.bot) return;
+
+            console.log(`⚡ [GATEWAY] Message from ${d.author.username}: "${d.content}"`);
+
+            // Only process if has content OR is mention/reply
+            const hasContent = d.content && d.content.trim().length > 0;
+            const isBotMentioned = checkForMention(d.content, d.mentions);
+            const isReply = !!d.message_reference;
+
+            let isReplyToBot = false;
+            if (isReply && d.message_reference) {
+              const repliedMessage = await safeGetRepliedMessage(
+                d.channel_id,
+                d.message_reference.message_id
+              );
+              if (repliedMessage) {
+                isReplyToBot = repliedMessage.author.id === MY_USER_ID;
+              }
+            }
+
+            // Gateway can handle: mentions, replies to bot, or messages with content
+            const canProcess = hasContent || isBotMentioned || isReplyToBot;
+
+            if (canProcess) {
+              // Mark as processed to avoid duplicate from polling
+              processedMessageIds.add(d.id);
+
+              if (messageHandler) {
+                await messageHandler(
+                  d.content || '',
+                  d.author.username,
+                  d.channel_id,
+                  d.id,
+                  {
+                    isReply,
+                    isReplyToBot,
+                    isBotMentioned,
+                    hasAttachments: d.attachments && d.attachments.length > 0,
+                    source: 'gateway'
+                  }
+                );
+              }
+            } else {
+              console.log(`⏭️ Gateway skipping empty message (polling will handle it)`);
+            }
+          }
+          break;
+      }
+    });
+
+    ws.on('close', (code) => {
+      console.log(`Gateway closed: ${code}`);
+      clearInterval(heartbeatInterval);
+      // Auto-reconnect
+      setTimeout(() => startGateway(messageHandler), 5000);
+    });
+
+    ws.on('error', (error) => {
+      console.error('Gateway error:', error);
+    });
+
+    return ws;
+  } catch (error) {
+    console.error('Failed to start gateway:', error);
+    throw error;
+  }
+}
+
+// Main function to start monitoring channels
+async function startMonitoring(channelIds, messageHandler) {
   if (!MY_USER_ID) {
     await getCurrentUser();
   }
 
-  // Get the gateway URL
-  const gateway = await discordRequest('gateway');
-  const ws = new WebSocket(`${gateway.url}?v=${API_VERSION}&encoding=json`);
+  console.log(`🎯 Monitoring ${channelIds.length} channels: ${channelIds.join(', ')}`);
 
-  let interval;
-  let sequence = null;
+  // Start polling for all channels (reliable message reading)
+  for (const channelId of channelIds) {
+    await startPolling(channelId, messageHandler);
+  }
 
-  ws.on('open', () => {
-    console.log('Connected to Discord Gateway');
-  });
+  // Start gateway for instant mentions/replies
+  await startGateway(messageHandler);
 
-  ws.on('message', async (data) => {
-    const payload = JSON.parse(data);
-
-    // Log all the guild channels when receiving the READY event
-    if (payload.t === 'READY') {
-      console.log('READY event received');
-      if (payload.d && payload.d.guilds) {
-        payload.d.guilds.forEach(guild => {
-          console.log(`Guild: ${guild.id} (${guild.name})`);
-          if (guild.channels) {
-            guild.channels.forEach(channel => {
-              console.log(`Channel: ${channel.id} (${channel.name})`);
-            });
-          }
-        });
-      }
-    }
-
-    const { op, d, s, t } = payload;
-
-    if (s) sequence = s;
-
-    switch (op) {
-      case 10: // Hello
-        interval = setInterval(() => {
-          ws.send(JSON.stringify({ op: 1, d: sequence }));
-        }, d.heartbeat_interval);
-
-        // Identify with the gateway
-        ws.send(JSON.stringify({
-          op: 2,
-          d: {
-            token: USER_TOKEN,
-            properties: {
-              $os: 'linux',
-              $browser: 'chrome',
-              $device: 'chrome'
-            },
-            intents: 32767 // Request all intents
-          }
-        }));
-        break;
-
-      case 0: // Event Dispatch
-        if (t === 'MESSAGE_CREATE') {
-          // Log message info for debugging
-          console.log(`Message from user ID: ${d.author.id}, MY_USER_ID: ${MY_USER_ID}, Bot: ${d.author.bot ? 'Yes' : 'No'}`);
-
-          // Add message ID to processed messages to avoid duplicate processing from polling
-          processedMessageIds.add(d.id);
-
-          // Ignore your own messages to prevent loops
-          if (d.author.id === MY_USER_ID) {
-            console.log('Ignoring own message');
-            return;
-          }
-
-          // Ignore messages from bots
-          if (d.author.bot) {
-            console.log('Ignoring bot message');
-            return;
-          }
-
-          // Check if this message mentions the bot (either by @mention or by user ID)
-          let isBotMentioned = false;
-
-          // Check for mentions in the mentions array
-          if (d.mentions && Array.isArray(d.mentions)) {
-            isBotMentioned = d.mentions.some(mention => mention.id === MY_USER_ID);
-          }
-
-          // Also check if the bot's ID or username appears in the content
-          // This handles cases where the message doesn't have a proper mention object
-          if (!isBotMentioned) {
-            const botUsername = await getCurrentUser().then(user => user.username.toLowerCase());
-            isBotMentioned = d.content.toLowerCase().includes(`@${botUsername}`) ||
-              d.content.includes(MY_USER_ID);
-          }
-
-          // Check if this message is a reply
-          const isReply = d.message_reference ? true : false;
-
-          // If it's a reply, check if it's replying to the bot
-          let isReplyToBot = false;
-          if (isReply && d.message_reference) {
-            // We need to fetch the message being replied to
-            try {
-              const repliedToMessage = await discordRequest(`channels/${d.channel_id}/messages/${d.message_reference.message_id}`);
-              isReplyToBot = repliedToMessage.author.id === MY_USER_ID;
-              console.log(`Message is a reply to ${repliedToMessage.author.username} (bot? ${isReplyToBot})`);
-            } catch (error) {
-              console.error('Error fetching replied-to message:', error);
-            }
-          }
-
-          // Log if bot is mentioned
-          if (isBotMentioned) {
-            console.log(`Bot was mentioned in this message`);
-          }
-
-          console.log(`[GATEWAY] New message from ${d.author.username}: ${d.content}`);
-
-          // Use the custom message handler if provided
-          if (messageHandler) {
-            // Pass relevant data to handler
-            await messageHandler(
-              d.content,
-              d.author.username,
-              d.channel_id,
-              d.id,
-              {
-                isReply,
-                isReplyToBot,
-                isBotMentioned,
-                hasAttachments: d.attachments && d.attachments.length > 0
-              }
-            );
-          }
-        }
-        break;
-    }
-  });
-
-  ws.on('close', (code) => {
-    console.log(`Connection closed with code ${code}`);
-    clearInterval(interval);
-
-    // Attempt to reconnect
-    setTimeout(() => {
-      console.log('Attempting to reconnect...');
-      listenForMessages(messageHandler);
-    }, 5000);
-  });
-
-  ws.on('error', (error) => {
-    console.error('WebSocket error:', error);
-  });
-
-  // Return the WebSocket instance in case it's needed elsewhere
-  return ws;
+  console.log(`✅ Bot monitoring active - Hybrid system running`);
 }
 
-// Export functions for use in other files
+// Cleanup function
+function stopMonitoring() {
+  pollingIntervals.forEach((interval, channelId) => {
+    clearInterval(interval);
+    console.log(`Stopped polling for channel ${channelId}`);
+  });
+  pollingIntervals.clear();
+}
+
 export {
   discordRequest,
-  getChannelMessages,
-  sendMessage,
   replyToMessage,
-  listenForMessages,
   getCurrentUser,
-  pollChannel
+  startMonitoring,
+  stopMonitoring
 };
