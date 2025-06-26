@@ -62,7 +62,7 @@ When a message is received in a monitored channel, the bot:
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/discord-self-ai-bot.git
+git clone https://github.com/yfbsei/discord-self-AI-bot.git
 cd discord-self-ai-bot
 ```
 
