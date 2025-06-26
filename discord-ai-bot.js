@@ -1,4 +1,4 @@
-// discord-ai-bot.js - Clean refactored version
+// discord-ai-bot.js - Updated with Together AI
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import { replyToMessage, startMonitoring } from './discord-base.js';
@@ -6,7 +6,7 @@ import { replyToMessage, startMonitoring } from './discord-base.js';
 dotenv.config();
 
 // Validate environment variables
-const requiredVars = ['USER_TOKEN', 'HUGGINGFACE_API_KEY', 'ADMIN_USERNAME', 'MONITORED_CHANNELS'];
+const requiredVars = ['USER_TOKEN', 'TOGETHER_API_KEY', 'OPENROUTER_API_KEY', 'ADMIN_USERNAME', 'MONITORED_CHANNELS'];
 const missingVars = requiredVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
@@ -25,9 +25,13 @@ try {
   process.exit(1);
 }
 
-const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
+const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
-const MODEL_URL = 'https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-8B-Instruct';
+const TOGETHER_API_URL = 'https://api.together.xyz/v1/chat/completions';
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const PRIMARY_MODEL = 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free';
+const FALLBACK_MODEL = 'mistralai/mistral-small-3.2-24b-instruct:free';
 
 // Bot settings
 let RESPOND_TO_ALL_MESSAGES = true; // ON mode by default
@@ -56,7 +60,6 @@ function cleanResponse(text) {
 
   try {
     let cleaned = text
-      .replace(/<\|.*?\|>/g, '') // Remove Llama tokens
       .replace(/^\s*(assistant|user|system):\s*/i, '') // Remove prefixes
       .replace(/^(as an ai|i'm an ai|as a language model)/i, '') // Remove AI speak
       .replace(/```[a-z]*\n|```/g, '') // Remove code blocks
@@ -65,18 +68,20 @@ function cleanResponse(text) {
       .trim()
       .replace(/\s+/g, ' ');
 
-    // Get first sentence
-    const sentences = cleaned.split(/[.!?]+/);
-    if (sentences.length > 0 && sentences[0].trim()) {
-      cleaned = sentences[0].trim();
-      if (!cleaned.match(/[.!?]$/)) {
-        cleaned += '.';
+    // Get first sentence if response is too long
+    if (cleaned.length > 150) {
+      const sentences = cleaned.split(/[.!?]+/);
+      if (sentences.length > 0 && sentences[0].trim()) {
+        cleaned = sentences[0].trim();
+        if (!cleaned.match(/[.!?]$/)) {
+          cleaned += '.';
+        }
       }
     }
 
-    // Limit length
-    if (cleaned.length > 120) {
-      cleaned = cleaned.substring(0, 120).trim() + '...';
+    // Final length limit
+    if (cleaned.length > 200) {
+      cleaned = cleaned.substring(0, 197).trim() + '...';
     }
 
     return cleaned || "hmm, not sure about that";
@@ -86,90 +91,129 @@ function cleanResponse(text) {
   }
 }
 
-// Get AI response from Hugging Face
+// Get AI response with fallback system
 async function getAIResponse(message) {
+  // Try Together AI first (primary)
   try {
-    const prompt = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+    console.log(`🔄 Calling Together AI (Primary)...`);
 
-You are a casual, friendly person on Discord. Keep responses very short (1 sentence max), natural, and conversational. Be helpful but brief. No formal explanations.<|eot_id|><|start_header_id|>user<|end_header_id|>
-
-${message}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
-
-`;
-
-    console.log(`🔄 Calling Hugging Face API...`);
-
-    const response = await fetch(MODEL_URL, {
+    const response = await fetch(TOGETHER_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${HUGGINGFACE_API_KEY}`
+        "Authorization": `Bearer ${TOGETHER_API_KEY}`
       },
       body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          max_new_tokens: 40,
-          temperature: 0.8,
-          top_p: 0.9,
-          do_sample: true,
-          return_full_text: false,
-          stop: ["<|eot_id|>", "<|end_of_text|>", "\n\n"]
-        }
+        model: PRIMARY_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: "You are a casual, friendly person on Discord. Keep responses very short (1-2 sentences max), natural, and conversational. Be helpful but brief. No formal explanations or AI-speak. Respond like a real person would in a chat."
+          },
+          {
+            role: "user",
+            content: message
+          }
+        ],
+        max_tokens: 60,
+        temperature: 0.8,
+        top_p: 0.9,
+        stop: ["\n\n", "User:", "Assistant:"]
       })
     });
 
-    console.log(`📡 API Response Status: ${response.status}`);
+    console.log(`📡 Together AI Response Status: ${response.status}`);
 
-    if (!response.ok) {
-      console.error(`❌ Hugging Face API error: ${response.status}`);
+    if (response.ok) {
+      const data = await response.json();
 
-      // Quick fallback responses for common cases
-      const lowerMessage = message.toLowerCase();
-      if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
-        return "hey there!";
+      if (data.choices && data.choices.length > 0 && data.choices[0].message) {
+        const aiText = data.choices[0].message.content;
+        const cleaned = cleanResponse(aiText);
+        console.log(`🤖 Together AI Response: "${cleaned}"`);
+        return cleaned;
       }
-      if (lowerMessage.includes('how') && lowerMessage.includes('you')) {
-        return "I'm doing well, thanks!";
-      }
-      if (lowerMessage.includes('?')) {
-        return "hmm, good question!";
-      }
-
-      return "sorry, having some technical issues right now";
-    }
-
-    const data = await response.json();
-    let aiText = '';
-
-    if (Array.isArray(data) && data.length > 0) {
-      aiText = data[0].generated_text || data[0];
-    } else if (data.generated_text) {
-      aiText = data.generated_text;
     } else {
-      aiText = String(data);
+      console.log(`⚠️ Together AI failed (${response.status}), trying fallback...`);
+      throw new Error(`Together AI API error: ${response.status}`);
     }
-
-    const cleaned = cleanResponse(aiText);
-    console.log(`🤖 AI Response: "${cleaned}"`);
-    return cleaned;
 
   } catch (error) {
-    console.error("❌ Error getting AI response:", error);
-
-    // Smart fallback responses
-    const lowerMessage = message.toLowerCase();
-    if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
-      return "hey!";
-    }
-    if (lowerMessage.includes('how') && lowerMessage.includes('you')) {
-      return "all good here!";
-    }
-    if (lowerMessage.includes('?')) {
-      return "not sure about that one";
-    }
-
-    return "oops, something went wrong";
+    console.log(`❌ Together AI error: ${error.message}`);
+    console.log(`🔄 Switching to OpenRouter fallback...`);
   }
+
+  // Try OpenRouter fallback
+  try {
+    console.log(`🔄 Calling OpenRouter (Fallback)...`);
+
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://github.com/yfbsei/discord-self-AI-bot",
+        "X-Title": "Discord Self AI Bot"
+      },
+      body: JSON.stringify({
+        model: FALLBACK_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: "You are a casual, friendly person on Discord. Keep responses very short (1-2 sentences max), natural, and conversational. Be helpful but brief. No formal explanations or AI-speak. Respond like a real person would in a chat."
+          },
+          {
+            role: "user",
+            content: message
+          }
+        ],
+        max_tokens: 60,
+        temperature: 0.8,
+        top_p: 0.9
+      })
+    });
+
+    console.log(`📡 OpenRouter Response Status: ${response.status}`);
+
+    if (response.ok) {
+      const data = await response.json();
+
+      if (data.choices && data.choices.length > 0 && data.choices[0].message) {
+        const aiText = data.choices[0].message.content;
+        const cleaned = cleanResponse(aiText);
+        console.log(`🤖 OpenRouter Response (Fallback): "${cleaned}"`);
+        return cleaned;
+      }
+    } else {
+      const errorText = await response.text();
+      console.error(`❌ OpenRouter API error: ${response.status} - ${errorText}`);
+    }
+
+  } catch (error) {
+    console.error("❌ OpenRouter fallback failed:", error);
+  }
+
+  // Final fallback - smart static responses
+  console.log("🆘 Both APIs failed, using smart fallback responses");
+
+  const lowerMessage = message.toLowerCase();
+  if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
+    return "hey there!";
+  }
+  if (lowerMessage.includes('how') && lowerMessage.includes('you')) {
+    return "I'm doing well, thanks!";
+  }
+  if (lowerMessage.includes('?')) {
+    return "hmm, good question!";
+  }
+  if (lowerMessage.includes('thanks') || lowerMessage.includes('thank')) {
+    return "you're welcome!";
+  }
+  if (lowerMessage.includes('bye') || lowerMessage.includes('goodbye')) {
+    return "see you later!";
+  }
+
+  return "sorry, having some technical issues right now";
 }
 
 // Check for duplicate messages
@@ -226,7 +270,7 @@ async function handleMessage(message, author, channelId, messageId, context = {}
       helpText += "- Tag me @username for responses in any mode\n";
       helpText += "- Reply to my messages to continue conversations\n";
       helpText += `- Current mode: ${RESPOND_TO_ALL_MESSAGES ? 'ON' : 'OFF'}\n`;
-      helpText += "- Powered by Llama 3.1 8B ⚡";
+      helpText += "- Primary: Llama 3.3 70B • Fallback: Mistral Small 24B ⚡";
 
       await replyToMessage(channelId, messageId, helpText);
       return;
@@ -307,6 +351,8 @@ async function startBot() {
   console.log(`👤 Admin: ${ADMIN_USERNAME}`);
   console.log(`📡 Monitoring channels: ${MONITORED_CHANNELS.join(', ')}`);
   console.log(`⚙️ Mode: ${RESPOND_TO_ALL_MESSAGES ? 'ON (all messages)' : 'OFF (mentions only)'}`);
+  console.log(`🧠 Primary Model: ${PRIMARY_MODEL}`);
+  console.log(`🔄 Fallback Model: ${FALLBACK_MODEL}`);
 
   try {
     await startMonitoring(MONITORED_CHANNELS, handleMessage);

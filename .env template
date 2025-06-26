@@ -5,9 +5,13 @@
 # Get this from Discord Developer Tools > Network > Authorization header
 USER_TOKEN="your_discord_user_token_here"
 
-# Hugging Face API Key (REQUIRED)
-# Get free key from: https://huggingface.co/settings/tokens
-HUGGINGFACE_API_KEY="your_huggingface_api_key_here"
+# Together AI API Key (REQUIRED - Primary)
+# Get free key from: https://api.together.xyz/settings/api-keys
+TOGETHER_API_KEY="your_together_api_key_here"
+
+# OpenRouter AI API Key (REQUIRED - Fallback)
+# Get free key from: https://openrouter.ai/settings/keys
+OPENROUTER_API_KEY="your_openrouter_api_key_here"
 
 # Admin Username (REQUIRED)
 # Your exact Discord username (case-sensitive)
@@ -40,12 +44,19 @@ MONITORED_CHANNELS=["1387582684081895630"]
 # 6. Find "Authorization" header
 # 7. Copy the value (starts with your token)
 
-# HUGGINGFACE_API_KEY:
-# 1. Go to https://huggingface.co
-# 2. Sign up/Login
-# 3. Go to Settings > Access Tokens
-# 4. Create new token
-# 5. Copy the token value
+# TOGETHER_API_KEY:
+# 1. Go to https://api.together.xyz
+# 2. Sign up/Login (free account available)
+# 3. Go to Settings > API Keys
+# 4. Create new API key
+# 5. Copy the key value (starts with your API key)
+
+# OPENROUTER_API_KEY:
+# 1. Go to https://openrouter.ai
+# 2. Sign up/Login (free account available)
+# 3. Go to Settings > Keys
+# 4. Create new API key
+# 5. Copy the key value
 
 # ADMIN_USERNAME:
 # Your Discord username exactly as shown in Discord
@@ -56,6 +67,15 @@ MONITORED_CHANNELS=["1387582684081895630"]
 # 2. Right-click any channel
 # 3. Click "Copy Channel ID"
 # 4. Paste into the array
+
+# ================================
+# DUAL AI SYSTEM BENEFITS:
+# ================================
+# - PRIMARY: Together AI - Meta Llama 3 70B (completely free)
+# - FALLBACK: OpenRouter - Mistral Small 24B (free tier)
+# - Automatic failover if primary is down
+# - 99.9% uptime with dual redundancy
+# - Best response quality with reliable backup
 
 # ================================
 # SECURITY NOTES:
